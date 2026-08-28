@@ -5,6 +5,7 @@ import 'package:final_project/features/dashboard/presentation/widgets/tickets_ta
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+
 // Tasarım Sistemi İçe Aktarımları
 import 'package:final_project/core/theme/app_colors.dart';
 import 'package:final_project/core/theme/theme_provider.dart';
@@ -118,6 +119,8 @@ class DashboardPage extends ConsumerWidget {
                       ),
                     Row(
                       children: [
+
+
                         // Gündüz / Gece Modu Butonux"
                         IconButton(
                           icon: Icon(

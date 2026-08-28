@@ -9,6 +9,8 @@ import 'package:final_project/features/auth/domain/app_user.dart';
 import 'package:final_project/features/announcements/domain/announcement.dart';
 import 'package:final_project/features/announcements/data/announcement_repository.dart';
 
+import 'package:final_project/core/services/onesignal_service.dart';
+
 void showAddAnnouncementDialog(
   BuildContext context,
   WidgetRef ref,
@@ -71,6 +73,13 @@ void showAddAnnouncementDialog(
               );
 
               await ref.read(announcementRepositoryProvider).addAnnouncement(newAnnouncement);
+              
+              // Hedefli Bildirim Gönder (Sadece o apartmandakilere)
+              OneSignalService.sendTargetedNotification(
+                title: "📢 " + titleController.text.trim(),
+                message: contentController.text.trim(),
+                targetApartmentId: activeApt,
+              );
               
               if (context.mounted) {
                 Navigator.pop(context); 

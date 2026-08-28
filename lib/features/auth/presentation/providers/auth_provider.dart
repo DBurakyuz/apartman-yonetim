@@ -1,9 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:final_project/features/auth/data/auth_repository.dart';
 import 'package:final_project/features/auth/domain/app_user.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 part 'auth_provider.g.dart';
 
@@ -49,9 +50,32 @@ Stream<AppUser?> currentUser(CurrentUserRef ref) async* {
        
        print("🚀 FIRESTORE'DAN GELEN VERİ: $data"); // DEBUG İÇİN
        
+       // --- YENİ EKLENEN KOD: OTURUM (SESSION) GÜVENLİK DUVARI ---
+       final prefs = await SharedPreferences.getInstance();
+       final localSessionId = prefs.getString('sessionId');
+       
+       // Giriş işlemi yapılıyorsa (yarış durumu) atma işlemini atla
+       if (localSessionId == 'IGNORE_KICKOUT') {
+         print("⏳ GİRİŞ İŞLEMİ SÜRÜYOR, KICK-OUT KORUMASI DEVRE DIŞI...");
+       }
+       // Eğer veritabanındaki şifre bizim telefondakiyle uyuşmuyorsa BAŞKASI GİRMİŞ DEMEKTİR!
+       // (localSessionId null olsa bile, veritabanında yeni bir session varsa eski cihazı atar)
+       else if (data['sessionId'] != null && data['sessionId'] != localSessionId) {
+         print("🚨 BAŞKA BİR CİHAZDAN GİRİŞ TESPİT EDİLDİ! ESKİ CİHAZ ATILIYOR...");
+         await FirebaseAuth.instance.signOut();
+         yield null;
+         continue; // Aşağıdaki kodları okuma, işlemi kes!
+       }
+
        try {
          final userObj = AppUser.fromJson(data);
          print("✅ APPUSER DÖNÜŞÜMÜ BAŞARILI: ${userObj.name}");
+         
+         // OneSignal Etiketleme
+         OneSignal.login(userObj.id);
+         OneSignal.User.addTagWithKey("apartmentId", userObj.apartmentId);
+         OneSignal.User.addTagWithKey("role", userObj.role.name);
+
          yield userObj;
        } catch (e, stacktrace) {
          print("❌ DÖNÜŞÜM HATASI: $e");
@@ -59,12 +83,16 @@ Stream<AppUser?> currentUser(CurrentUserRef ref) async* {
          yield null;
        }
        
-    } else {
+      } else {
        print("⚠️ FIRESTORE BELGESİ BULUNAMADI (UID: ${firebaseUser.uid})");
+       // --- YENİ EKLENEN KOD: KULLANICIYI ZORLA ÇIKIŞ YAPTIR (KICK-OUT) ---
+       await FirebaseAuth.instance.signOut();
+       // ------------------------------------------------------------------
        yield null; 
     }
+    }
   }
-}
+
 
 // -----------------------------------------------------------------------------
 // YAYIN 3: SEÇİLİ APARTMAN HAFIZASI

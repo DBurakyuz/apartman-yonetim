@@ -5,6 +5,7 @@ import 'package:final_project/core/theme/app_spacing.dart';
 import 'package:final_project/features/auth/domain/app_user.dart';
 import 'package:final_project/shared/design_system/atoms/app_card.dart';
 import 'package:final_project/features/dues/data/due_repository.dart';
+import 'package:final_project/core/services/onesignal_service.dart';
 
 class DuesSection extends ConsumerWidget {
   final AppUser currentUser;
@@ -43,6 +44,22 @@ class DuesSection extends ConsumerWidget {
                           onPressed: () async {
                             try {
                               await ref.read(dueRepositoryProvider).markAsPaid(due.id);
+                              
+                              // 1. Yöneticiye Giden Bildirim (Daire x, aidatını ödedi)
+                              OneSignalService.sendNotificationToRole(
+                                title: "💰 Ödeme Alındı",
+                                message: "${currentUser.name} (Daire ${currentUser.flatNumber ?? '?'}), '${due.title}' ödemesini gerçekleştirdi.",
+                                targetApartmentId: currentUser.apartmentId ?? 'Bilinmiyor',
+                                targetRole: "manager", // Sadece Yöneticilere
+                              );
+
+                              // 2. Ödeyen Kişiye Giden Teşekkür Bildirimi (Kişiye Özel Makbuz)
+                              OneSignalService.sendNotificationToUser(
+                                title: "✅ Ödemeniz Onaylandı",
+                                message: "${due.amount} TL tutarındaki '${due.title}' ödemeniz alınmıştır. Teşekkür ederiz.",
+                                targetUserId: currentUser.id, // Sadece ödeyen sakine
+                              );
+
                             } catch (e) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(

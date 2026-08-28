@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:final_project/features/auth/presentation/providers/auth_provider.dart';
 import 'package:final_project/features/auth/domain/app_user.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:final_project/core/services/onesignal_service.dart';
 
 class AdminDuesSection extends ConsumerWidget {
   const AdminDuesSection({super.key});
@@ -207,18 +209,23 @@ class AdminDuesSection extends ConsumerWidget {
                                       UserRole.resident,
                                     );
                               }
+                              // --- YENİ EKLENEN KOD: Doğrudan Hedef Kişiye Özel Bildirim At ---
+                              final String rolAdi = (newRole == UserRole.manager) ? "YÖNETİCİ" : "Daire Sakini";
+                              
+                              OneSignalService.sendNotificationToUser(
+                              title: "👑 Yetkileriniz Güncellendi",
+                              message: "Apartmandaki rolünüz '$rolAdi' olarak değiştirildi.",
+                              targetUserId: user.id, // VURUCU NOKTA: Sadece işlem yapılan kişiye gider!
+);
+// -----------------------------------------------------------------
 
                               // Verileri yenile
-                              ref.invalidate(allUsersProvider);
                               ref.invalidate(currentUserProvider);
 
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context)
-                                    .showSnackBar(
+                                ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text(
-                                      "Yetki işlemi başarıyla tamamlandı!",
-                                    ),
+                                    content: Text("Yetki işlemi başarıyla tamamlandı!"),
                                   ),
                                 );
                               }
@@ -231,6 +238,49 @@ class AdminDuesSection extends ConsumerWidget {
                               ),
                             ),
                           ),
+                          
+                        // --- YENİ EKLENEN KOD: KİŞİYİ SİLME (ÇIKARMA) BUTONU ---
+                        if (user.role != UserRole.admin)
+                          InkWell(
+                            onTap: () async {
+                              final bool? confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text("Kişiyi Çıkar"),
+                                  content: Text("${user.name} isimli kişiyi apartmandan tamamen silmek istediğinize emin misiniz? Bu işlem geri alınamaz."),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("İptal")),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                      onPressed: () => Navigator.pop(context, true),
+                                      child: const Text("Sil", style: TextStyle(color: Colors.white)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              
+                              if (confirm == true) {
+                                // 1. Veritabanından Acımasızca Sil!
+                                await FirebaseFirestore.instance.collection('users').doc(user.id).delete();
+                                
+                                // 2. Tüm Apartmana Dedikoduyu (Bildirimi) Sal!
+                                OneSignalService.sendTargetedNotification(
+                                  title: "🚪 Ayrılık",
+                                  message: "${user.name}, apartmanımızdan ayrılmıştır.",
+                                  targetApartmentId: apartmentId,
+                                );
+                                
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kişi başarıyla apartmandan silindi.")));
+                                }
+                              }
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.only(left: 12),
+                              child: Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                            ),
+                          ),
+                        // --------------------------------------------------------
                       ],
                     ),
 
@@ -318,14 +368,24 @@ class AdminDuesSection extends ConsumerWidget {
 
 // Tüm kullanıcıların listesini çeken provider
 // Sadece seçili apartmandaki kullanıcıları getirir.
-final allUsersProvider = FutureProvider<List<AppUser>>((ref) async {
+// Tüm kullanıcıların listesini CANLI çeken provider (Stream)
+final allUsersProvider = StreamProvider<List<AppUser>>((ref) {
   final activeApt = ref.watch(activeApartmentProvider);
 
   if (activeApt.isEmpty) {
-    return [];
+    return Stream.value([]); // Apartman seçili değilse boş liste döner
   }
 
-  return await ref
-      .read(authRepositoryProvider)
-      .getAllResidents(activeApt);
+  // get() yerine snapshots() kullanarak canlı yayına geçiyoruz!
+  return FirebaseFirestore.instance
+      .collection('users')
+      .where('apartmentId', isEqualTo: activeApt)
+      .snapshots()
+      .map((snapshot) {
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      data['id'] = doc.id;
+      return AppUser.fromJson(data);
+    }).toList();
+  });
 });

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 // Tema ve Bileşen İçe Aktarımları (Import)
 import 'package:final_project/core/theme/app_colors.dart';
 import 'package:final_project/core/theme/app_text_styles.dart';
@@ -166,10 +167,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   });
 
                   try {
+                    // --- YARIŞ DURUMUNU (RACE CONDITION) ÖNLEMEK İÇİN GEÇİCİ BAYRAK ---
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('sessionId', 'IGNORE_KICKOUT');
+                    // ------------------------------------------------------------------
+
                     await ref.read(authRepositoryProvider).signInWithEmailAndPassword(
                       _emailController.text.trim(), 
                       _passwordController.text.trim()
                     );
+                    
+                    // --- YENİ EKLENEN KOD: OTURUM ŞİFRESİ ÜRET VE KAYDET ---
+                    // O anki milisaniyeyi şifre olarak kullanıyoruz (Her saniye değişir)
+                    final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
+                    
+                    // 1. Telefonun kendi hafızasına kazı
+                    await prefs.setString('sessionId', sessionId);
+                    
+                    // 2. Veritabanına (Kullanıcının belgesine) yaz
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                        'sessionId': sessionId
+                      });
+                    }
                   } catch (e) {
                     setState(() {
                       _isLoading = false; 

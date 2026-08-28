@@ -1,7 +1,7 @@
 import 'package:final_project/features/auth/presentation/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:final_project/core/services/onesignal_service.dart';
 import 'package:final_project/core/theme/app_colors.dart';
 import 'package:final_project/core/theme/app_spacing.dart';
 import 'package:final_project/shared/design_system/atoms/app_button.dart';
@@ -59,6 +59,14 @@ class _AddTicketDialogState extends State<_AddTicketDialog> {
 
   
     await widget.ref.read(ticketRepositoryProvider).addTicket(newTicket);
+        // --- YENİ EKLENEN KOD: Sadece Yöneticilere Bildirim At ---
+    OneSignalService.sendNotificationToRole(
+      title: "🛠️ Yeni Talep: $title",
+      message: "${widget.appUser.name} yeni bir talep/şikayet oluşturdu.",
+      targetApartmentId: activeApt.isEmpty ? 'Bilinmiyor' : activeApt,
+      targetRole: "manager", // SİHİRLİ KELİME: Sadece Yöneticilere Gider!
+    );
+    // ---------------------------------------------------------
 
   
     if (mounted) {

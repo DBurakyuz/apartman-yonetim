@@ -8,6 +8,8 @@ import 'package:final_project/features/auth/data/auth_repository.dart';
 import 'package:final_project/features/auth/domain/app_user.dart';
 import 'package:final_project/features/dues/data/due_repository.dart';
 
+import 'package:final_project/core/services/onesignal_service.dart';
+
 // Ekranda klavyeden yazı yazılacağı ve yükleniyor çarkı döneceği için (Ekran güncellenecek)
 // StatelessWidget DEĞİL, Stateful (Değişken) Widget kullanıyoruz.
 class AddDueDialog extends ConsumerStatefulWidget {
@@ -82,6 +84,13 @@ class _AddDueDialogState extends ConsumerState<AddDueDialog> {
 
       // 5. DueRepository'deki o devasa kamyonu çalıştırıp herkesin hesabına faturayı kesiyoruz!
       await ref.read(dueRepositoryProvider).assignDueToAll(title, amount, residents);
+
+      // Hedefli Bildirim Gönder (Sadece o apartmandakilere)
+      OneSignalService.sendTargetedNotification(
+        title: "🔔 Yeni Ödeme",
+        message: "$title için hesabınıza ${amount.toStringAsFixed(2)} ₺ borç yansıtılmıştır.",
+        targetApartmentId: activeApt,
+      );
 
       // 6. Başarılı olduysa pencereyi kapat ve yeşil mesaj ver
       if (mounted) {

@@ -1,6 +1,10 @@
+import 'package:final_project/core/services/onesignal_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:final_project/core/theme/app_colors.dart';
 import 'package:final_project/core/theme/app_text_styles.dart';
@@ -50,6 +54,22 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         name: name,
         flatNumber: flat,
         apartmentId: apartmentId,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
+      await prefs.setString('sessionId', sessionId);
+      
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+          'sessionId': sessionId
+        });
+      }
+
+         OneSignalService.sendTargetedNotification(
+        title: "👋 Yeni Komşu!",
+        message: "$name, Daire $flat olarak aramıza katıldı. Hoş geldin diyelim!",
+        targetApartmentId: apartmentId, // Sadece o apartmana gider
       );
       
       if (mounted) {
